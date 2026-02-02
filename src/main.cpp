@@ -98,6 +98,8 @@ function setLed(state) {
   }
 }
 function toggleLed() {
+  var label = document.getElementById('ledlabel');
+  setLed(label.innerText === 'ON' ? 'OFF' : 'ON');
   fetch('/led').then(function(r){return r.text()}).then(setLed);
 }
 fetch('/status').then(function(r){return r.text()}).then(setLed);
@@ -150,7 +152,7 @@ void setup() {
     // WiFi - STA mode
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+     WiFi.setTxPower(WIFI_POWER_11dBm);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     Serial.printf("MAC: %s\n", WiFi.macAddress().c_str());
     Serial.printf("Connecting to '%s'\n", WIFI_SSID);

@@ -93,7 +93,7 @@ The high deep-sleep current is caused by the ME6211 LDO quiescent draw and the r
 
 ### Known Issues
 
-- **WiFi antenna defect (some batches):** Crystal placed too close to ceramic antenna. Workaround: `WiFi.setTxPower(WIFI_POWER_8_5dBm)`.
+- **WiFi antenna defect (most batches):** The stock CrossAir CA-C03 SMD antenna is tuned for 2.7 GHz, not 2.4 GHz, and the board is missing a 3.8mm stripline required by the antenna datasheet. The crystal is also placed too close to the antenna, causing TX distortion at higher power levels. Software workaround: `WiFi.setTxPower(WIFI_POWER_11dBm)` — max usable on this board (13 dBm fails, default ~20 dBm fails). Hardware fix: solder a 31mm quarter-wave wire antenna onto the chip antenna pads (6-10 dB gain, allows full TX power). See: https://peterneufeld.wordpress.com/2025/03/04/esp32-c3-supermini-antenna-modification/
 - **Single core:** No dual-core task pinning. All FreeRTOS tasks share one RISC-V core.
 - **No DAC, no touch pins** (unlike classic ESP32).
 - **GPIO8/9 for I2C causes boot failures** -- external pull-ups interfere with strapping. Avoid.

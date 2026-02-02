@@ -217,6 +217,71 @@ IP line now scrolls horizontally when the IP is too long to fit.
 
 ---
 
+## Test 7 — 2026-02-02
+
+**Change:** Bumped TX power from 8.5 dBm to 11 dBm (STA mode, from bedroom
+~1 room away from router).
+
+**Result:** SUCCESS — connects and serves HTTP from bedroom.
+
+---
+
+## Test 8 — 2026-02-02
+
+**Change:** Bumped TX power to 13 dBm.
+
+**Result:** FAILED — connection drops. 13 dBm triggers the antenna defect.
+Reverted to 11 dBm.
+
+**Conclusion:** 11 dBm is the maximum usable TX power for this board. Provides
+more range than 8.5 dBm while staying below the interference threshold.
+
+---
+
+## Wire Antenna Mod (planned)
+
+The stock CrossAir CA-C03 SMD antenna is tuned for 2.7 GHz, not 2.4 GHz. The
+board is also missing a 3.8mm stripline required by the antenna datasheet. This
+means the factory antenna was never working at the correct frequency.
+
+**Fix:** Solder a 31mm quarter-wave wire antenna onto the chip antenna pads.
+People report 6-10 dB gain (2-3x range), which should allow full TX power.
+
+**Procedure (Peter Neufeld method):**
+1. Cut 31mm of ~1mm solid wire (silver-plated or copper)
+2. Wrap ~16mm of the wire around a 5mm drill bit to form a loop (~8mm diameter)
+3. The remaining ~15mm points straight up vertically
+4. Open the loop ends so they touch both pads of the existing SMD antenna
+5. Solder one end to either pad (leave the chip antenna in place)
+
+**References:**
+- https://peterneufeld.wordpress.com/2025/03/04/esp32-c3-supermini-antenna-modification/
+- https://hackaday.com/2025/04/07/simple-antenna-makes-for-better-esp32-c3-wifi/
+- https://www.cnx-software.com/2025/04/09/antenna-hack-more-than-doubles-the-range-of-cheap-esp32-c3-usb-c-boards/
+
+---
+
+## Updated Summary
+
+| Test | Mode | TX Power | Connects? | Reachable? | Web works? |
+|------|------|----------|-----------|------------|------------|
+| 1    | STA  | Default  | No        | —          | —          |
+| 2    | STA  | Default (close) | No  | —          | —          |
+| 3    | STA  | 8.5 dBm | Yes       | Yes*       | Yes*       |
+| 3c   | STA  | 11 dBm  | No        | —          | —          |
+| 4    | AP   | 8.5 dBm | Yes       | Yes        | Yes        |
+| 5    | AP   | Default  | No        | —          | —          |
+| 6    | STA  | 8.5 dBm | Yes       | Yes        | Yes        |
+| 7    | STA  | 11 dBm  | Yes       | Yes        | Yes        |
+| 8    | STA  | 13 dBm  | No        | —          | —          |
+
+*Test 3 was working but we pinged the wrong IP due to OLED truncation.
+
+Note: Test 3c (11 dBm, failed) and Test 7 (11 dBm, succeeded) suggest 11 dBm
+is right at the edge — it may work or fail depending on conditions.
+
+---
+
 ## WiFi Status Code Reference
 
 | Code | Constant            | Meaning                        |
