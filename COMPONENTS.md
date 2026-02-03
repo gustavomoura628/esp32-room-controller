@@ -504,21 +504,15 @@ temperature/humidity display.
 
 ## 8. Relay Module
 
-Mechanical relay module on GPIO7 for room light control. The relay coil is 5V,
-driven via an NPN transistor or MOSFET since the ESP32-C3 outputs 3.3V logic.
-A GPIO HIGH switches the transistor, which pulls the relay coil to 5V.
+3-pin relay module (driver circuit built in) on GPIO7 for room light control.
 
-Typical circuit:
+### Wiring
 
-```
-GPIO7 ── 1kΩ ── NPN base (or MOSFET gate)
-                NPN collector ── relay coil ── 5V
-                NPN emitter ── GND
-                Flyback diode across coil (cathode to 5V)
-```
-
-Most pre-built relay modules already include the transistor driver and flyback
-diode on-board. Check whether yours is active-HIGH or active-LOW.
+| Wire colour | Pin | Connect to |
+|-------------|-----|------------|
+| Orange | VCC | 5V rail |
+| Brown | GND | Shared GND |
+| Yellow | IN | GPIO7 |
 
 ---
 

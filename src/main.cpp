@@ -91,70 +91,69 @@ const char *PAGE = R"rawliteral(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ESP32-C3 Test</title>
 <style>
-  body { font-family: sans-serif; max-width: 400px; margin: 40px auto; padding: 0 20px;
+  body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px;
          background: #1a1a1a; color: #e0e0e0; }
   h1 { font-size: 1.4em; }
-  h2 { font-size: 1.1em; margin-top: 28px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .card { background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 8px;
-          padding: 20px; margin: 16px 0; text-align: center; }
-  .led-box { width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 8px;
+          padding: 16px; text-align: center; }
+  .wide { grid-column: span 3; }
+  .led-box { width: 40px; height: 40px; border-radius: 8px; margin: 0 auto 6px;
              transition: background 0.2s; }
   .led-on { background: #3b82f6; border: 2px solid #3b82f6; }
   .led-off { background: #1a1a1a; border: 2px solid #3a3a3a; }
   #ledlabel { font-size: 0.9em; color: #aaa; }
-  button { padding: 10px 20px; font-size: 1em; margin-top: 12px; cursor: pointer;
+  button { padding: 8px 16px; font-size: 0.9em; margin-top: 8px; cursor: pointer;
            background: #3b82f6; color: #fff; border: none; border-radius: 6px; }
   button:active { background: #2563eb; }
+  @media (max-width: 500px) { .grid { grid-template-columns: repeat(2, 1fr); }
+    .wide { grid-column: span 2; } }
 </style>
 </head>
 <body>
-<h1>ESP32-C3 Test</h1>
+<h1>ESP32-C3 CO2 Sensor</h1>
+
+<div class="grid">
 
 <div class="card">
-  <div id="co2val" style="font-size:2.2em;font-weight:bold;color:#888">--</div>
-  <div style="font-size:0.9em;color:#aaa">CO2 (ppm)</div>
+  <div id="co2val" style="font-size:2em;font-weight:bold;color:#888">--</div>
+  <div style="font-size:0.85em;color:#aaa">CO2 (ppm)</div>
 </div>
 
 <div class="card">
-  <div id="tempval" style="font-size:1.8em;font-weight:bold;color:#888">--</div>
-  <div style="font-size:0.9em;color:#aaa">CO2 sensor temp (unreliable)</div>
+  <div id="htutemp" style="font-size:2em;font-weight:bold;color:#888">--</div>
+  <div style="font-size:0.85em;color:#aaa">Temperature</div>
 </div>
 
 <div class="card">
-  <div id="htutemp" style="font-size:1.8em;font-weight:bold;color:#888">--</div>
-  <div style="font-size:0.9em;color:#aaa">Temperature</div>
+  <div id="htuhum" style="font-size:2em;font-weight:bold;color:#888">--</div>
+  <div style="font-size:0.85em;color:#aaa">Humidity</div>
 </div>
 
 <div class="card">
-  <div id="htuhum" style="font-size:1.8em;font-weight:bold;color:#888">--</div>
-  <div style="font-size:0.9em;color:#aaa">Humidity</div>
-</div>
-
-<div class="card">
-  <div id="battvolt" style="font-size:1.8em;font-weight:bold;color:#888">--</div>
-  <div id="battlabel" style="font-size:0.9em;color:#aaa">Battery</div>
+  <div id="battvolt" style="font-size:1.6em;font-weight:bold;color:#888">--</div>
+  <div id="battlabel" style="font-size:0.85em;color:#aaa">Battery</div>
 </div>
 
 <div class="card">
   <div id="ledbox" class="led-box led-off"></div>
-  <div id="ledlabel">OFF</div>
+  <div id="ledlabel">Board LED OFF</div>
   <button onclick="toggleLed()">Toggle LED</button>
 </div>
 
-<div class="card">
-  <div style="font-size:0.9em;color:#aaa;margin-bottom:8px">LED Strip</div>
+<div class="card wide">
+  <div style="font-size:0.9em;color:#aaa;margin-bottom:6px">LED Strip</div>
   <button id="stripbtn" onclick="toggleStrip()">Turn On</button>
-  <div style="margin-top:12px">
-    <label style="font-size:0.85em;color:#aaa">Brightness</label><br>
+  <div style="margin-top:10px;display:flex;gap:6px;justify-content:center;align-items:center">
+    <button onclick="setMode('rainbow')" style="font-size:0.85em;padding:6px 12px;margin:0">Rainbow</button>
+    <button onclick="setMode('solid')" style="font-size:0.85em;padding:6px 12px;margin:0">Solid</button>
+    <input type="color" id="stripclr" value="#ffffff" onchange="setStrip()" style="height:32px;width:32px;border:none;padding:0;cursor:pointer">
+  </div>
+  <div style="margin-top:8px">
     <input type="range" id="stripbri" min="1" max="255" value="128" style="width:100%" oninput="setStrip()">
   </div>
-  <div style="margin-top:8px">
-    <button onclick="setMode('solid')" style="font-size:0.85em;padding:6px 12px">Solid</button>
-    <button onclick="setMode('rainbow')" style="font-size:0.85em;padding:6px 12px">Rainbow</button>
-  </div>
-  <div style="margin-top:8px">
-    <input type="color" id="stripclr" value="#ffffff" onchange="setStrip()">
-  </div>
+</div>
+
 </div>
 
 <script>
@@ -163,15 +162,15 @@ function setLed(state) {
   var label = document.getElementById('ledlabel');
   if (state === 'ON') {
     box.className = 'led-box led-on';
-    label.innerText = 'ON';
+    label.innerText = 'Board LED ON';
   } else {
     box.className = 'led-box led-off';
-    label.innerText = 'OFF';
+    label.innerText = 'Board LED OFF';
   }
 }
 function toggleLed() {
   var label = document.getElementById('ledlabel');
-  setLed(label.innerText === 'ON' ? 'OFF' : 'ON');
+  setLed(label.innerText.indexOf('ON') >= 0 ? 'OFF' : 'ON');
   fetch('/led').then(function(r){return r.text()}).then(setLed);
 }
 fetch('/status').then(function(r){return r.text()}).then(setLed);
@@ -179,10 +178,17 @@ function updateBatt() {
   fetch('/battery').then(function(r){return r.text()}).then(function(v) {
     var el = document.getElementById('battvolt');
     var f = parseFloat(v);
-    el.innerText = f.toFixed(2) + 'V';
-    if (f >= 3.7) el.style.color = '#22c55e';
-    else if (f >= 3.4) el.style.color = '#eab308';
-    else el.style.color = '#ef4444';
+    if (f < 0.5) {
+      el.innerText = '--';
+      el.style.color = '#555';
+      document.getElementById('battlabel').innerText = 'Battery disconnected';
+    } else {
+      el.innerText = f.toFixed(2) + 'V';
+      document.getElementById('battlabel').innerText = 'Battery';
+      if (f >= 3.7) el.style.color = '#22c55e';
+      else if (f >= 3.4) el.style.color = '#eab308';
+      else el.style.color = '#ef4444';
+    }
   });
 }
 updateBatt();
@@ -222,17 +228,6 @@ function updateHTU() {
 }
 updateHTU();
 setInterval(updateHTU, 5000);
-function updateCO2Temp() {
-  fetch('/co2temp').then(function(r){return r.text()}).then(function(v) {
-    var el = document.getElementById('tempval');
-    var t = parseInt(v);
-    if (t === -1) { el.innerText = '--'; el.style.color = '#888'; return; }
-    el.innerText = t + '\u00B0C';
-    el.style.color = '#aaa';
-  });
-}
-updateCO2Temp();
-setInterval(updateCO2Temp, 5000);
 var stripIsOn = false;
 function toggleStrip() {
   stripIsOn = !stripIsOn;
