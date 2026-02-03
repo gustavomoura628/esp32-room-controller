@@ -67,8 +67,10 @@ void updateOled() {
     }
     u8g2.drawStr(0, 20, line2);
 
-    // LED state
-    u8g2.drawStr(0, 32, ledOn ? "LED: ON" : "LED: OFF");
+    // Temperature + humidity
+    char line3[16];
+    snprintf(line3, sizeof(line3), "%.1fC %.0f%%", htuTemp, htuHumidity);
+    u8g2.drawStr(0, 32, line3);
 
     u8g2.sendBuffer();
 }
