@@ -11,6 +11,8 @@
 
 Indoor room controller built on an ESP32-C3 SuperMini with a built-in 0.42" OLED display. Monitors CO2, temperature, and humidity via MH-Z19C and HTU21D sensors. Controls a room light via relay and a WS2813 LED strip. Serves a dark-themed web UI with live sensor readings and controls.
 
+![Web UI](screenshot.png)
+
 ## Hardware
 
 | Component | Role |
