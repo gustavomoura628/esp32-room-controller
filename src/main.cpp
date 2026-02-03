@@ -58,7 +58,7 @@ const char *PAGE = R"rawliteral(
           padding: 20px; margin: 16px 0; text-align: center; }
   .led-box { width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 8px;
              transition: background 0.2s; }
-  .led-on { background: #3b82f6; }
+  .led-on { background: #3b82f6; border: 2px solid #3b82f6; }
   .led-off { background: #1a1a1a; border: 2px solid #3a3a3a; }
   #ledlabel { font-size: 0.9em; color: #aaa; }
   button { padding: 10px 20px; font-size: 1em; margin-top: 12px; cursor: pointer;
