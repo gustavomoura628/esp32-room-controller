@@ -282,6 +282,27 @@ is right at the edge — it may work or fail depending on conditions.
 
 ---
 
+## Network Setup — D-Link Access Point
+
+The main router (WLGG) is in the living room. At 11 dBm, the ESP32 connects
+from nearby but struggles through walls to the bedroom. Solution: an old D-Link
+router in the bedroom acting as a dumb access point.
+
+**Setup:**
+1. Factory reset the D-Link
+2. Set SSID/password (stored in `include/secrets.h`)
+3. **Disable DHCP** on the D-Link — the main router handles IP assignment
+4. Connect the main router to a **LAN port** on the D-Link (not WAN)
+5. Set the D-Link's own IP to something on the main subnet to avoid conflicts
+
+This makes the D-Link a transparent bridge — all devices end up on the same
+`192.168.0.0/24` subnet regardless of which AP they connect to.
+
+**Result:** ESP32 connects to the D-Link at 11 dBm, gets IP `192.168.0.242`
+from the main router's DHCP, and is reachable from all devices on the network.
+
+---
+
 ## WiFi Status Code Reference
 
 | Code | Constant            | Meaning                        |
