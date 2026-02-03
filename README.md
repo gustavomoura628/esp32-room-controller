@@ -22,16 +22,30 @@ Indoor CO2 monitor built on an ESP32-C3 SuperMini with a built-in 0.42" OLED dis
 |-----------|------|
 | ESP32-C3 SuperMini + 0.42" OLED | MCU + display |
 | MH-Z19B/C NDIR sensor | CO2 measurement (planned) |
+| HTU21D | Temperature + humidity (planned) |
 | 18650 cell + Battery Shield V3 | Portable power (planned) |
+| Relay module | Room light control (planned) |
+| WS2813 LED strip (1m, 30 LEDs) | Ambient lighting (planned) |
 
 See [COMPONENTS.md](COMPONENTS.md) for full specs, pinouts, and known issues.
+
+## Power modes
+
+**Battery mode (portable sensors):** ESP32 + CO2 sensor + HTU21D powered by the
+18650 battery shield. No relay or LED strip — they draw too much for battery.
+Battery voltage monitored via ADC on GPIO4 with ntfy alerts below 3.4V.
+
+**Wall mode (sensors + lights):** Everything powered from a 5V 2A+ phone charger.
+The charger feeds a shared 5V rail on the breadboard — ESP32 (via V5 pin),
+MH-Z19C, relay, and LED strip all tap from it. No battery needed. Worst-case
+draw is ~2A (LED strip at full white + everything else).
 
 ## Features
 
 - **Web UI** -- dark theme, LED toggle with visual indicator, OLED message input
 - **LED control** -- blue rounded-square indicator, optimistic UI updates
 - **OLED display** -- shows IP address (scrolling if too long), LED state, and custom message
-- **WiFi** -- STA mode with TX power limited to 11 dBm (antenna defect workaround)
+- **WiFi** -- STA mode with TX power limited to 8.5 dBm (antenna defect workaround)
 
 ## Building and flashing
 
@@ -58,4 +72,4 @@ pio device monitor
 
 ## WiFi antenna defect
 
-The ESP32-C3 SuperMini has a known antenna design flaw -- the stock SMD antenna is tuned for 2.7 GHz instead of 2.4 GHz, and a required stripline is missing. TX power must be capped at 11 dBm in software (`WiFi.setTxPower(WIFI_POWER_11dBm)`). A 31mm wire antenna mod can fix this permanently. Details in [WIFI_TEST_LOG.md](WIFI_TEST_LOG.md) and [COMPONENTS.md](COMPONENTS.md).
+The ESP32-C3 SuperMini has a known antenna design flaw -- the stock SMD antenna is tuned for 2.7 GHz instead of 2.4 GHz, and a required stripline is missing. TX power must be capped at 8.5 dBm in software (`WiFi.setTxPower(WIFI_POWER_8_5dBm)`). A 31mm wire antenna mod can fix this permanently. Details in [WIFI_TEST_LOG.md](WIFI_TEST_LOG.md) and [COMPONENTS.md](COMPONENTS.md).
