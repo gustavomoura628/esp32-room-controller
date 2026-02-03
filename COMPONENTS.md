@@ -542,3 +542,15 @@ or wire the data line through the DIN of a sacrificial first pixel powered at
 
 Peak current at full white: 30 LEDs x ~50mA = 1.5A. Power the strip directly
 from a 5V supply, not through the ESP32.
+
+### Connector wiring
+
+The strip comes with a 4-wire connector. Pads between LEDs read
+`GND  BO-BI  DO-DI  +5V`.
+
+| Wire colour | Pad | Connect to |
+|-------------|-----|------------|
+| White | GND | Shared GND |
+| Blue | DO-DI | GPIO10 (data) |
+| Green | BO-BI | Leave unconnected (backup data) |
+| Red | +5V | 5V charger rail |

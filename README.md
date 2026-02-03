@@ -7,7 +7,7 @@
 - [x] Wire up HTU21D temperature/humidity sensor (shares I2C bus with OLED)
 - [ ] Home Assistant integration (ESPHome + MQTT)
 - [ ] Relay for room light control (GPIO7)
-- [ ] WS2813 LED strip (GPIO10, 1m 30 LEDs)
+- [x] WS2813 LED strip (GPIO10, 1m 30 LEDs)
 
 Indoor CO2 monitor built on an ESP32-C3 SuperMini with a built-in 0.42" OLED display. Monitors CO2, temperature, and humidity via MH-Z19C and HTU21D sensors. Serves a dark-themed web UI with live sensor readings and LED control.
 
@@ -20,7 +20,7 @@ Indoor CO2 monitor built on an ESP32-C3 SuperMini with a built-in 0.42" OLED dis
 | HTU21D | Temperature + humidity |
 | 18650 cell + Battery Shield V3 | Portable power + voltage monitoring |
 | Relay module | Room light control (planned) |
-| WS2813 LED strip (1m, 30 LEDs) | Ambient lighting (planned) |
+| WS2813 LED strip (1m, 30 LEDs) | Ambient lighting |
 
 See [COMPONENTS.md](COMPONENTS.md) for full specs, pinouts, and known issues.
 
@@ -37,9 +37,9 @@ draw is ~2A (LED strip at full white + everything else).
 
 ## Features
 
-- **Web UI** -- dark theme, live CO2/temp/humidity readings, battery voltage, LED toggle
-- **LED control** -- blue rounded-square indicator, optimistic UI updates
-- **OLED display** -- shows IP address (scrolling if too long), CO2 ppm, battery voltage, LED state
+- **Web UI** -- dark theme, live CO2/temp/humidity readings, battery voltage, LED strip controls
+- **LED strip** -- WS2813, 30 LEDs, solid color + rainbow mode, brightness slider, color picker
+- **OLED display** -- shows IP address (scrolling if too long), CO2 ppm, battery voltage, temp/humidity
 - **CO2 monitoring** -- MH-Z19C NDIR sensor, 5s polling, 3-minute warmup (skipped on soft reset via RTC memory)
 - **Temperature & humidity** -- HTU21D sensor on shared I2C bus, 5s polling
 - **Battery monitoring** -- ADC via voltage divider on GPIO4, ntfy alerts below 3.4V
@@ -72,6 +72,7 @@ pio device monitor
 | `/co2temp` | GET | Returns CO2 sensor internal temp (unreliable, -1 during warmup) |
 | `/temp` | GET | Returns HTU21D temperature in °C |
 | `/humidity` | GET | Returns HTU21D humidity in %RH |
+| `/strip` | GET | LED strip control: `on`, `brightness`, `mode`, `r`, `g`, `b` params |
 
 ## WiFi antenna defect
 

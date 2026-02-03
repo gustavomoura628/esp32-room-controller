@@ -6,6 +6,7 @@
 #include <MHZ19.h>
 #include <Wire.h>
 #include <HTU21D.h>
+#include <FastLED.h>
 #include "secrets.h"
 
 #define LED_PIN 8
@@ -17,11 +18,14 @@
 #define BATTERY_LOW_THRESHOLD 3.4
 #define NTFY_INTERVAL 300000  // 5 minutes
 #define SKIP_WARMUP true      // debug: skip CO2 warmup
+#define LED_STRIP_PIN 10
+#define NUM_LEDS 30
 
 U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
 WebServer server(80);
 MHZ19 mhz;
 HTU21D htu;
+CRGB leds[NUM_LEDS];
 
 RTC_DATA_ATTR bool sensorWasRunning = false;
 
@@ -37,6 +41,11 @@ int co2temp = 0;
 unsigned long lastCO2Read = 0;
 float htuTemp = 0.0;
 float htuHumidity = 0.0;
+uint8_t stripBrightness = 128;
+CRGB stripColor = CRGB::White;
+bool stripOn = false;
+String stripMode = "solid";
+uint8_t rainbowHue = 0;
 unsigned long lastHTU21DRead = 0;
 unsigned long bootTime = 0;
 
@@ -132,6 +141,22 @@ const char *PAGE = R"rawliteral(
   <button onclick="toggleLed()">Toggle LED</button>
 </div>
 
+<div class="card">
+  <div style="font-size:0.9em;color:#aaa;margin-bottom:8px">LED Strip</div>
+  <button id="stripbtn" onclick="toggleStrip()">Turn On</button>
+  <div style="margin-top:12px">
+    <label style="font-size:0.85em;color:#aaa">Brightness</label><br>
+    <input type="range" id="stripbri" min="1" max="255" value="128" style="width:100%" oninput="setStrip()">
+  </div>
+  <div style="margin-top:8px">
+    <button onclick="setMode('solid')" style="font-size:0.85em;padding:6px 12px">Solid</button>
+    <button onclick="setMode('rainbow')" style="font-size:0.85em;padding:6px 12px">Rainbow</button>
+  </div>
+  <div style="margin-top:8px">
+    <input type="color" id="stripclr" value="#ffffff" onchange="setStrip()">
+  </div>
+</div>
+
 <script>
 function setLed(state) {
   var box = document.getElementById('ledbox');
@@ -208,6 +233,26 @@ function updateCO2Temp() {
 }
 updateCO2Temp();
 setInterval(updateCO2Temp, 5000);
+var stripIsOn = false;
+function toggleStrip() {
+  stripIsOn = !stripIsOn;
+  document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+  setStrip();
+}
+function setMode(m) {
+  fetch('/strip?mode=' + m + '&on=1').then(function(r){return r.json()}).then(function(d) {
+    stripIsOn = d.on === 1;
+    document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+  });
+}
+function setStrip() {
+  var b = document.getElementById('stripbri').value;
+  var c = document.getElementById('stripclr').value;
+  var r = parseInt(c.substr(1,2),16);
+  var g = parseInt(c.substr(3,2),16);
+  var bl = parseInt(c.substr(5,2),16);
+  fetch('/strip?on=' + (stripIsOn?1:0) + '&brightness=' + b + '&r=' + r + '&g=' + g + '&b=' + bl);
+}
 </script>
 </body>
 </html>
@@ -287,6 +332,42 @@ void readHTU21D() {
     Serial.printf("HTU21D: %.1f C  %.1f %%RH\n", htuTemp, htuHumidity);
 }
 
+void updateStrip() {
+    if (!stripOn) {
+        FastLED.clear();
+        FastLED.show();
+        return;
+    }
+    FastLED.setBrightness(stripBrightness);
+    if (stripMode == "solid") {
+        fill_solid(leds, NUM_LEDS, stripColor);
+    } else if (stripMode == "rainbow") {
+        fill_rainbow(leds, NUM_LEDS, rainbowHue++, 255 / NUM_LEDS);
+    }
+    FastLED.show();
+}
+
+void handleStrip() {
+    if (server.hasArg("on")) {
+        stripOn = server.arg("on") == "1";
+    }
+    if (server.hasArg("brightness")) {
+        stripBrightness = server.arg("brightness").toInt();
+    }
+    if (server.hasArg("mode")) {
+        stripMode = server.arg("mode");
+    }
+    if (server.hasArg("r") && server.hasArg("g") && server.hasArg("b")) {
+        stripColor = CRGB(server.arg("r").toInt(), server.arg("g").toInt(), server.arg("b").toInt());
+    }
+    updateStrip();
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "{\"on\":%d,\"brightness\":%d,\"mode\":\"%s\"}",
+        stripOn ? 1 : 0, stripBrightness, stripMode.c_str());
+    server.send(200, "application/json", buf);
+}
+
 void handleTemp() {
     char buf[8];
     snprintf(buf, sizeof(buf), "%.1f", htuTemp);
@@ -302,9 +383,15 @@ void handleHumidity() {
 void setup() {
     Serial.begin(115200);
 
-    // LED
+    // Onboard LED
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH); // OFF (inverted)
+
+    // LED strip
+    FastLED.addLeds<WS2813, LED_STRIP_PIN, GRB>(leds, NUM_LEDS);
+    FastLED.setCorrection(TypicalLEDStrip);
+    FastLED.clear();
+    FastLED.show();
 
     // CO2 sensor (UART on GPIO20 RX, GPIO21 TX)
     Serial1.begin(9600, SERIAL_8N1, 20, 21);
@@ -384,6 +471,7 @@ void setup() {
     server.on("/co2temp", handleCO2Temp);
     server.on("/temp", handleTemp);
     server.on("/humidity", handleHumidity);
+    server.on("/strip", handleStrip);
     server.begin();
 
     Serial.println("Web server started.");
@@ -407,6 +495,11 @@ void setup() {
 
 void loop() {
     server.handleClient();
+
+    // Update LED strip (needed for animations like rainbow)
+    if (stripOn && stripMode == "rainbow") {
+        updateStrip();
+    }
 
     // Read CO2 periodically
     if (millis() - lastCO2Read >= CO2_READ_INTERVAL) {
