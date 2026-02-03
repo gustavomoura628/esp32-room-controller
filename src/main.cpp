@@ -4,12 +4,15 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <MHZ19.h>
+#include <Wire.h>
+#include <HTU21D.h>
 #include "secrets.h"
 
 #define LED_PIN 8
 #define BATTERY_PIN 4
 #define BATTERY_READ_INTERVAL 10000
 #define CO2_READ_INTERVAL 5000
+#define HTU21D_READ_INTERVAL 5000
 #define CO2_WARMUP_MS 180000  // 3 minutes
 #define BATTERY_LOW_THRESHOLD 3.4
 #define NTFY_INTERVAL 300000  // 5 minutes
@@ -18,6 +21,7 @@
 U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
 WebServer server(80);
 MHZ19 mhz;
+HTU21D htu;
 
 RTC_DATA_ATTR bool sensorWasRunning = false;
 
@@ -31,6 +35,9 @@ unsigned long lastNtfySent = 0;
 int co2ppm = 0;
 int co2temp = 0;
 unsigned long lastCO2Read = 0;
+float htuTemp = 0.0;
+float htuHumidity = 0.0;
+unsigned long lastHTU21DRead = 0;
 unsigned long bootTime = 0;
 
 void updateOled() {
@@ -103,6 +110,16 @@ const char *PAGE = R"rawliteral(
 </div>
 
 <div class="card">
+  <div id="htutemp" style="font-size:1.8em;font-weight:bold;color:#888">--</div>
+  <div style="font-size:0.9em;color:#aaa">Temperature</div>
+</div>
+
+<div class="card">
+  <div id="htuhum" style="font-size:1.8em;font-weight:bold;color:#888">--</div>
+  <div style="font-size:0.9em;color:#aaa">Humidity</div>
+</div>
+
+<div class="card">
   <div id="battvolt" style="font-size:1.8em;font-weight:bold;color:#888">--</div>
   <div id="battlabel" style="font-size:0.9em;color:#aaa">Battery</div>
 </div>
@@ -160,6 +177,24 @@ function updateCO2() {
 }
 updateCO2();
 setInterval(updateCO2, 5000);
+function updateHTU() {
+  fetch('/temp').then(function(r){return r.text()}).then(function(v) {
+    var el = document.getElementById('htutemp');
+    var t = parseFloat(v);
+    el.innerText = t.toFixed(1) + '\u00B0C';
+    el.style.color = '#22c55e';
+  });
+  fetch('/humidity').then(function(r){return r.text()}).then(function(v) {
+    var el = document.getElementById('htuhum');
+    var h = parseFloat(v);
+    el.innerText = h.toFixed(1) + '%';
+    if (h <= 60) el.style.color = '#22c55e';
+    else if (h <= 70) el.style.color = '#eab308';
+    else el.style.color = '#ef4444';
+  });
+}
+updateHTU();
+setInterval(updateHTU, 5000);
 function updateCO2Temp() {
   fetch('/co2temp').then(function(r){return r.text()}).then(function(v) {
     var el = document.getElementById('tempval');
@@ -244,6 +279,24 @@ void readCO2() {
     sensorWasRunning = true;
 }
 
+void readHTU21D() {
+    htuTemp = htu.readTemperature();
+    htuHumidity = htu.readHumidity();
+    Serial.printf("HTU21D: %.1f C  %.1f %%RH\n", htuTemp, htuHumidity);
+}
+
+void handleTemp() {
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%.1f", htuTemp);
+    server.send(200, "text/plain", buf);
+}
+
+void handleHumidity() {
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%.1f", htuHumidity);
+    server.send(200, "text/plain", buf);
+}
+
 void setup() {
     Serial.begin(115200);
 
@@ -264,11 +317,21 @@ void setup() {
     char fwVer[5];
     mhz.getVersion(fwVer);
     fwVer[4] = '\0';
-    Serial.printf("MH-Z19 firmware: %s\n", fwVer);
-    Serial.printf("MH-Z19 range: %d ppm\n", mhz.getRange());
+    if (mhz.errorCode == RESULT_OK) {
+        Serial.printf("MH-Z19: firmware %s, range %d ppm\n", fwVer, mhz.getRange());
+    } else {
+        Serial.printf("MH-Z19: sensor not found! (error %d)\n", mhz.errorCode);
+    }
 
     // OLED
     u8g2.begin();
+
+    // HTU21D (shares I2C bus with OLED on GPIO5/6, already initialized by u8g2)
+    if (htu.begin() != true) {
+        Serial.println("HTU21D: sensor not found!");
+    } else {
+        Serial.printf("HTU21D: %.1f C  %.1f %%RH\n", htu.readTemperature(), htu.readHumidity());
+    }
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_6x10_tr);
     u8g2.drawStr(0, 10, "Connecting");
@@ -317,6 +380,8 @@ void setup() {
     server.on("/battery", handleBattery);
     server.on("/co2", handleCO2);
     server.on("/co2temp", handleCO2Temp);
+    server.on("/temp", handleTemp);
+    server.on("/humidity", handleHumidity);
     server.begin();
 
     Serial.println("Web server started.");
@@ -346,6 +411,12 @@ void loop() {
         lastCO2Read = millis();
         readCO2();
         updateOled();
+    }
+
+    // Read HTU21D periodically
+    if (millis() - lastHTU21DRead >= HTU21D_READ_INTERVAL) {
+        lastHTU21DRead = millis();
+        readHTU21D();
     }
 
     // Read battery voltage periodically
