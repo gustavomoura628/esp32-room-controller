@@ -151,7 +151,7 @@ void setup() {
     // WiFi - STA mode
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
-     WiFi.setTxPower(WIFI_POWER_11dBm);
+     WiFi.setTxPower(WIFI_POWER_8_5dBm);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     Serial.printf("MAC: %s\n", WiFi.macAddress().c_str());
     Serial.printf("Connecting to '%s'\n", WIFI_SSID);

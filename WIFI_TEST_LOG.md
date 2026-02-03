@@ -233,8 +233,8 @@ IP line now scrolls horizontally when the IP is too long to fit.
 **Result:** FAILED — connection drops. 13 dBm triggers the antenna defect.
 Reverted to 11 dBm.
 
-**Conclusion:** 11 dBm is the maximum usable TX power for this board. Provides
-more range than 8.5 dBm while staying below the interference threshold.
+**Conclusion:** 13 dBm triggers the antenna defect. 11 dBm connects but is
+unreliable — HTTP requests intermittently fail. Reverted to 8.5 dBm.
 
 ---
 
@@ -277,8 +277,8 @@ People report 6-10 dB gain (2-3x range), which should allow full TX power.
 
 *Test 3 was working but we pinged the wrong IP due to OLED truncation.
 
-Note: Test 3c (11 dBm, failed) and Test 7 (11 dBm, succeeded) suggest 11 dBm
-is right at the edge — it may work or fail depending on conditions.
+11 dBm is borderline — connects but drops requests under load. 8.5 dBm is
+the reliable choice. With a nearby D-Link AP, range is not a concern.
 
 ---
 
