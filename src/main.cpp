@@ -14,10 +14,8 @@
 #define BATTERY_READ_INTERVAL 10000
 #define CO2_READ_INTERVAL 5000
 #define HTU21D_READ_INTERVAL 5000
-#define CO2_WARMUP_MS 180000  // 3 minutes
 #define BATTERY_LOW_THRESHOLD 3.4
 #define NTFY_INTERVAL 300000  // 5 minutes
-#define SKIP_WARMUP true      // debug: skip CO2 warmup
 #define RELAY_PIN 7
 #define LED_STRIP_PIN 10
 #define NUM_LEDS 30
@@ -27,8 +25,6 @@ WebServer server(80);
 MHZ19 mhz;
 HTU21D htu;
 CRGB leds[NUM_LEDS];
-
-RTC_DATA_ATTR bool sensorWasRunning = false;
 
 bool ledOn = false;
 bool relayOn = false;
@@ -40,6 +36,7 @@ bool ntfyFirstAlert = true;
 unsigned long lastNtfySent = 0;
 int co2ppm = 0;
 int co2temp = 0;
+int co2error = 0;
 unsigned long lastCO2Read = 0;
 float htuTemp = 0.0;
 float htuHumidity = 0.0;
@@ -49,7 +46,6 @@ bool stripOn = false;
 String stripMode = "solid";
 uint8_t rainbowHue = 0;
 unsigned long lastHTU21DRead = 0;
-unsigned long bootTime = 0;
 
 void updateOled() {
     u8g2.clearBuffer();
@@ -70,12 +66,7 @@ void updateOled() {
 
     // CO2 + battery voltage
     char line2[16];
-    if (millis() - bootTime < CO2_WARMUP_MS) {
-        unsigned long remaining = (CO2_WARMUP_MS - (millis() - bootTime)) / 1000;
-        snprintf(line2, sizeof(line2), "%lus %.2fV", remaining, batteryVoltage);
-    } else {
-        snprintf(line2, sizeof(line2), "%dppm %.1fV", co2ppm, batteryVoltage);
-    }
+    snprintf(line2, sizeof(line2), "%dppm %.1fV", co2ppm, batteryVoltage);
     u8g2.drawStr(0, 20, line2);
 
     // Temperature + humidity
@@ -121,7 +112,7 @@ const char *PAGE = R"rawliteral(
 
 <div class="card">
   <div id="co2val" style="font-size:2em;font-weight:bold;color:#888">--</div>
-  <div style="font-size:0.85em;color:#aaa">CO2 (ppm)</div>
+  <div id="co2label" style="font-size:0.85em;color:#aaa">CO2 (ppm)</div>
 </div>
 
 <div class="card">
@@ -206,17 +197,26 @@ function updateBatt() {
 updateBatt();
 setInterval(updateBatt, 10000);
 function updateCO2() {
-  fetch('/co2').then(function(r){return r.text()}).then(function(v) {
+  fetch('/co2status').then(function(r){return r.json()}).then(function(d) {
     var el = document.getElementById('co2val');
-    var ppm = parseInt(v);
-    if (ppm < 0) {
-      el.innerText = 'WARM ' + Math.abs(ppm) + 's';
-      el.style.color = '#888';
+    var label = document.getElementById('co2label');
+    if (d.result !== 1) {
+      var errNames = {0:'no response',2:'timeout',3:'desync',4:'CRC error',5:'filter'};
+      el.innerText = d.ppm || '--';
+      el.style.color = '#ef4444';
+      label.innerText = 'CO2 (' + (errNames[d.result] || 'error ' + d.result) + ')';
       return;
     }
-    el.innerText = ppm;
-    if (ppm <= 800) el.style.color = '#22c55e';
-    else if (ppm <= 1000) el.style.color = '#eab308';
+    if (d.uptime < 180) {
+      el.innerText = d.ppm;
+      el.style.color = '#888';
+      label.innerText = 'CO2 warming up (' + (180 - d.uptime) + 's)';
+      return;
+    }
+    el.innerText = d.ppm;
+    label.innerText = 'CO2 (ppm)';
+    if (d.ppm <= 800) el.style.color = '#22c55e';
+    else if (d.ppm <= 1000) el.style.color = '#eab308';
     else el.style.color = '#ef4444';
   });
 }
@@ -332,30 +332,32 @@ void sendNtfyAlert() {
 
 void handleCO2() {
     char buf[8];
-    if (millis() - bootTime < CO2_WARMUP_MS) {
-        int remaining = (CO2_WARMUP_MS - (millis() - bootTime)) / 1000;
-        snprintf(buf, sizeof(buf), "-%d", remaining);
-    } else {
-        snprintf(buf, sizeof(buf), "%d", co2ppm);
-    }
+    snprintf(buf, sizeof(buf), "%d", co2ppm);
     server.send(200, "text/plain", buf);
 }
 
 void handleCO2Temp() {
     char buf[8];
-    if (millis() - bootTime < CO2_WARMUP_MS) {
-        server.send(200, "text/plain", "-1");
-    } else {
-        snprintf(buf, sizeof(buf), "%d", co2temp);
-        server.send(200, "text/plain", buf);
-    }
+    snprintf(buf, sizeof(buf), "%d", co2temp);
+    server.send(200, "text/plain", buf);
+}
+
+void handleCO2Status() {
+    char buf[64];
+    unsigned long uptime = millis() / 1000;
+    snprintf(buf, sizeof(buf), "{\"result\":%d,\"uptime\":%lu,\"ppm\":%d}", co2error, uptime, co2ppm);
+    server.send(200, "application/json", buf);
 }
 
 void readCO2() {
     co2ppm = mhz.getCO2();
+    co2error = mhz.errorCode;
     co2temp = mhz.getTemperature();
-    Serial.printf("CO2: %d ppm  Temp: %d C\n", co2ppm, co2temp);
-    sensorWasRunning = true;
+    if (co2error == RESULT_OK) {
+        Serial.printf("CO2: %d ppm  Temp: %d C\n", co2ppm, co2temp);
+    } else {
+        Serial.printf("CO2: read error (%d), ppm=%d\n", co2error, co2ppm);
+    }
 }
 
 void readHTU21D() {
@@ -435,11 +437,6 @@ void setup() {
     while (Serial1.available()) Serial1.read();
     mhz.begin(Serial1);
     mhz.autoCalibration(false);
-    bootTime = millis();
-    if (SKIP_WARMUP || sensorWasRunning) {
-        bootTime -= CO2_WARMUP_MS; // skip warmup
-        Serial.println("Skipping CO2 warmup.");
-    }
 
     char fwVer[5];
     mhz.getVersion(fwVer);
@@ -507,6 +504,7 @@ void setup() {
     server.on("/battery", handleBattery);
     server.on("/co2", handleCO2);
     server.on("/co2temp", handleCO2Temp);
+    server.on("/co2status", handleCO2Status);
     server.on("/temp", handleTemp);
     server.on("/humidity", handleHumidity);
     server.on("/strip", handleStrip);

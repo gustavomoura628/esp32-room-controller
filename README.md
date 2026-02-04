@@ -42,7 +42,7 @@ draw is ~2A (LED strip at full white + everything else).
 - **Web UI** -- dark theme, live CO2/temp/humidity readings, battery voltage, LED strip controls, room light relay
 - **LED strip** -- WS2813, 30 LEDs, solid color + rainbow mode, brightness slider, color picker
 - **OLED display** -- shows IP address (scrolling if too long), CO2 ppm, battery voltage, temp/humidity
-- **CO2 monitoring** -- MH-Z19C NDIR sensor, 5s polling, 3-minute warmup (skipped on soft reset via RTC memory)
+- **CO2 monitoring** -- MH-Z19C NDIR sensor, 5s polling, error status on web UI (warmup, timeout, desync, CRC)
 - **Temperature & humidity** -- HTU21D sensor on shared I2C bus, 5s polling
 - **Battery monitoring** -- ADC via voltage divider on GPIO4, ntfy alerts below 3.4V
 - **Push notifications** -- ntfy alerts for boot and low battery
@@ -70,7 +70,8 @@ pio device monitor
 | `/led` | GET | Toggles LED, returns `ON` or `OFF` |
 | `/status` | GET | Returns current LED state as plain text |
 | `/battery` | GET | Returns battery voltage as plain text (e.g. `3.82`) |
-| `/co2` | GET | Returns CO2 ppm (negative value = warmup seconds remaining) |
+| `/co2` | GET | Returns CO2 ppm |
+| `/co2status` | GET | Returns JSON: `result` (error code), `uptime` (seconds), `ppm` |
 | `/co2temp` | GET | Returns CO2 sensor internal temp (unreliable, -1 during warmup) |
 | `/temp` | GET | Returns HTU21D temperature in °C |
 | `/humidity` | GET | Returns HTU21D humidity in %RH |
