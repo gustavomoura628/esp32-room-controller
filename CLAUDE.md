@@ -11,9 +11,9 @@ Instead, use the flash script:
 ./flash.sh
 ```
 
-This triggers `watch_flash.sh` (which must be running in a separate terminal),
-waits for serial output to stabilize (3s idle), and prints the log. Hard timeout
-is 20 seconds in case the ESP32 code loops.
+This triggers `watch_flash.sh` (which must be running in a separate terminal).
+Build and upload output is suppressed on success (shown on failure). After a
+successful flash, 5 seconds of ESP32 serial output is captured and printed.
 
 ### When to flash
 

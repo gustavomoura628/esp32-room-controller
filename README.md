@@ -53,14 +53,11 @@ draw is ~2A (LED strip at full white + everything else).
 Requires [PlatformIO](https://platformio.org/).
 
 ```
-pio run -t upload
+pio run -t upload -t monitor
 ```
 
-Monitor serial output:
-
-```
-pio device monitor
-```
+When using Claude Code, use `./flash.sh` instead (requires `./watch_flash.sh`
+running in a separate terminal). See [CLAUDE.md](CLAUDE.md).
 
 ## Web endpoints
 
@@ -72,7 +69,7 @@ pio device monitor
 | `/battery` | GET | Returns battery voltage as plain text (e.g. `3.82`) |
 | `/co2` | GET | Returns CO2 ppm |
 | `/co2status` | GET | Returns JSON: `result` (error code), `uptime` (seconds), `ppm` |
-| `/co2temp` | GET | Returns CO2 sensor internal temp (unreliable, -1 during warmup) |
+| `/co2temp` | GET | Returns CO2 sensor internal temp (unreliable, 0 before first read) |
 | `/temp` | GET | Returns HTU21D temperature in °C |
 | `/humidity` | GET | Returns HTU21D humidity in %RH |
 | `/relay` | GET | Toggles relay, returns `ON` or `OFF` |
