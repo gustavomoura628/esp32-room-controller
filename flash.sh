@@ -1,79 +1,78 @@
 #!/bin/bash
 #
-# flash.sh — Trigger a flash and stream serial output in real time
+# flash.sh — Trigger a flash and show results
 #
-# Touches reflash.signal (picked up by watch_flash.sh), then polls
-# serial.log for new content. Streams new lines as they appear and
-# exits once 3 seconds pass with no new content, or after a hard 20s
-# timeout (from when output starts stabilizing, not from flash start).
+# Touches reflash.signal (picked up by watch_flash.sh), then monitors
+# serial.log for phase markers.  Only prints output on failure (build
+# or upload).  For the monitor phase, waits 5 seconds after the serial
+# monitor connects, then prints the captured ESP32 output.
 #
 # Usage:
 #   ./flash.sh
 
 SIGNAL="./reflash.signal"
 LOG="./serial.log"
-IDLE_THRESHOLD=3
-HARD_TIMEOUT=20
+TIMEOUT=90
 
-# Record current size so we can detect when the log starts updating
-if [ -f "$LOG" ]; then
-    old_size=$(stat -c %s "$LOG")
-else
-    old_size=0
-fi
+# Check if a pattern exists in the flash phase section of the log.
+flash_has() {
+    sed -n '/===PHASE:FLASH===/,$ p' "$LOG" 2>/dev/null | grep -q -- "$1"
+}
+
+# Truncate log so we only see fresh output
+> "$LOG"
 
 # Trigger the flash
 touch "$SIGNAL"
 
-# Wait for serial.log to start updating (flash has begun)
-echo "Waiting for flash to start..."
-waited=0
+start=$(date +%s)
+deadline=$((start + TIMEOUT))
+
+# ── Phase 1: Build ───────────────────────────────────────────────────
+echo -n "Building"
 while true; do
-    if [ -f "$LOG" ]; then
-        cur_size=$(stat -c %s "$LOG")
-        [ "$cur_size" != "$old_size" ] && break
-    fi
-    if [ "$waited" -ge 20 ]; then
-        echo "Timeout waiting for flash to start."
+    grep -q "===PHASE:BUILD===" "$LOG" 2>/dev/null && break
+    if [ "$(date +%s)" -ge "$((start + 20))" ]; then
+        echo " - timed out waiting for watch_flash.sh"
         exit 1
     fi
-    sleep 1
-    waited=$((waited + 1))
+    sleep 0.5
 done
-
-# Stream new content and wait for idle
-# tee truncates serial.log on each run, so start printing from 0
-printed=0
-last_size=$(stat -c %s "$LOG")
-last_change=$(date +%s)
-start=$(date +%s)
 
 while true; do
-    sleep 0.5
-    cur_size=$(stat -c %s "$LOG")
-    now=$(date +%s)
-
-    # Print any new content
-    if [ "$cur_size" -gt "$printed" ]; then
-        dd if="$LOG" bs=1 skip="$printed" count=$((cur_size - printed)) 2>/dev/null
-        printed="$cur_size"
-    fi
-
-    # Track last change
-    if [ "$cur_size" != "$last_size" ]; then
-        last_size="$cur_size"
-        last_change="$now"
-    fi
-
-    idle=$(( now - last_change ))
-    elapsed=$(( now - start ))
-
-    if [ "$idle" -ge "$IDLE_THRESHOLD" ]; then
-        break
-    fi
-    if [ "$elapsed" -ge "$HARD_TIMEOUT" ]; then
+    grep -q "===RESULT:BUILD_OK===" "$LOG" 2>/dev/null && { echo " - OK"; break; }
+    grep -q "===RESULT:BUILD_FAILED===" "$LOG" 2>/dev/null && {
+        echo " - FAILED"
         echo ""
-        echo "Hard timeout reached."
-        break
-    fi
+        awk '/===PHASE:BUILD===/{f=1;next} /===RESULT:BUILD_FAILED===/{exit} f' "$LOG"
+        exit 1
+    }
+    [ "$(date +%s)" -ge "$deadline" ] && { echo " - TIMEOUT"; exit 1; }
+    sleep 0.5
 done
+
+# ── Phase 2: Upload ─────────────────────────────────────────────────
+# With combined -t upload -t monitor, PlatformIO doesn't print [SUCCESS]
+# between targets.  The monitor starting (--- Terminal) means upload worked.
+echo -n "Uploading"
+while true; do
+    flash_has "--- Terminal" && { echo " - OK"; break; }
+    flash_has "\\[FAILED\\]" && {
+        echo " - FAILED"
+        echo ""
+        awk '/===PHASE:FLASH===/{f=1;next} f' "$LOG"
+        exit 1
+    }
+    [ "$(date +%s)" -ge "$deadline" ] && { echo " - TIMEOUT"; exit 1; }
+    sleep 0.5
+done
+
+# ── Phase 3: Serial output ──────────────────────────────────────────
+# Wait 5 seconds for ESP32 output to accumulate, then print it.
+sleep 5
+echo "Serial output:"
+awk '
+    /===PHASE:FLASH===/ { flash=1 }
+    flash && /--- Quit:/ { output=1; next }
+    output
+' "$LOG"
