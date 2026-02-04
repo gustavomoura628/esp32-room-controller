@@ -78,6 +78,7 @@ pio device monitor
 | `/relay` | GET | Toggles relay, returns `ON` or `OFF` |
 | `/relaystatus` | GET | Returns current relay state as plain text |
 | `/strip` | GET | LED strip control: `on`, `brightness`, `mode`, `r`, `g`, `b` params |
+| `/poll` | GET | Returns combined LED, relay, and strip state as JSON |
 
 ## WiFi antenna defect
 

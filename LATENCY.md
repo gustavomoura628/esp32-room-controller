@@ -226,42 +226,45 @@ isn't fully proven. It may involve:
 
 ## Improving response time
 
-### Fix 1: Eliminate the second UART round trip (easy, safe)
+### Fix 1: Eliminate the second UART round trip -- IMPLEMENTED (subsumed by Fix 3)
+
+Subsumed by Fix 3. The non-blocking CO2 read bypasses the MH-Z19 library entirely
+and parses the temperature from the raw UART response (byte[4] - 40), so
+`getTemperature()` is never called in the loop.
+
+### Fix 2: Add handleClient() between blocking operations -- IMPLEMENTED
 
 ```cpp
-co2temp = mhz.getTemperature(false);  // read from getCO2() buffer, no UART
-```
-
-Cuts UART blocking from ~400ms to ~200ms. The default `getTemperature(true)` sends
-the **exact same command** as getCO2() again -- pure waste.
-
-### Fix 2: Add handleClient() between blocking operations (easy, safe)
-
-```cpp
-readCO2();
-server.handleClient();  // process pending requests between sensor reads
-readHTU21D();
+// After CO2 state machine
+server.handleClient();
+// After readHTU21D()
 server.handleClient();
 ```
 
-Ensures web requests are processed between UART and I2C blocking windows. Reduces
-worst-case response time from ~530ms to max(200ms, 66ms) = ~200ms.
+With Fix 3 eliminating CO2 blocking, this mainly helps after HTU21D (~66ms).
 
-### Fix 3: Non-blocking CO2 reads (medium effort, big win)
+### Fix 3: Non-blocking CO2 reads -- IMPLEMENTED
 
-Instead of the library's blocking read, implement a state machine:
+Replaced the blocking `readCO2()` call in `loop()` with a UART state machine:
 
-```
-State 1: Send CO2 command (9 bytes UART write)
-State 2: Check Serial1.available() each loop iteration
-         If 9 bytes ready → parse response → State 1 (next interval)
-         If timeout → error recovery
+```cpp
+enum CO2State { CO2_IDLE, CO2_WAITING };
 ```
 
-This eliminates ALL busy-waiting. handleClient() runs between every byte received.
-Worst-case response time drops to ~1ms (one loop iteration).
+- **CO2_IDLE + timer expired:** sends raw 0x86 command (9 bytes), transitions to CO2_WAITING
+- **CO2_WAITING + 9 bytes available:** validates header (0xFF 0x86), checks CRC, parses
+  CO2 ppm and temperature from response bytes
+- **CO2_WAITING + 500ms timeout:** sets error, flushes UART, adds 1s recovery delay
+- **Header mismatch (desync):** flushes UART, sets error, adds 1s recovery delay
 
-### Fix 4: Use AsyncWebServer (major refactor, best result)
+Uses command 0x86 (standard CO2 read) instead of the library's 0x85 (unlimited).
+The original `readCO2()` function is kept for debug/manual use. The MH-Z19 library
+is still used in `setup()` for getVersion/getRange/autoCalibration.
+
+This eliminates ALL busy-waiting from CO2 reads. The loop runs freely while waiting
+for the sensor response.
+
+### Fix 4: Use AsyncWebServer (not implemented)
 
 The ESPAsyncWebServer library handles connections in the WiFi/LwIP task context
 (priority 23), not in the loop task. Request handlers are called as callbacks when
@@ -269,20 +272,29 @@ data is ready. No polling, no single-client limitation, no HC_WAIT_READ trap.
 
 This would make response time truly independent of loop() blocking.
 
-### Fix 5: Combine poll endpoints (easy, reduces contention)
+### Fix 5: Combine poll endpoints -- IMPLEMENTED
 
-Instead of 3 separate poll requests every 5 seconds (/status, /relaystatus, /strip),
-add a single `/poll` endpoint that returns all state in one JSON response. Reduces
-TCP connections from 3 to 1 per poll cycle.
+Added a `/poll` endpoint returning all pollable state in one JSON response:
+```json
+{"led":1,"relay":0,"on":1,"brightness":128,"mode":"solid","r":255,"g":255,"b":255}
+```
 
-### Summary of expected improvements
+Replaced 3 separate JS polling intervals (`/status`, `/relaystatus`, `/strip`) with
+a single `fetch('/poll')` on load + one `setInterval` every 5s using a `syncAll()`
+function. Reduces TCP connections from 3 to 1 per poll cycle.
 
-| Fix | Worst-case delay | Effort |
+Individual endpoints (`/status`, `/relaystatus`, `/strip`) are kept for action responses.
+
+### Summary
+
+| Fix | Worst-case delay | Status |
 |-----|-------------------|--------|
-| Current code | ~530ms (normal), ~2030ms (CO2 error) | -- |
-| Fix 1 (getTemperature false) | ~330ms | 1 line |
-| Fix 1+2 (+ handleClient between) | ~200ms | 3 lines |
-| Fix 1+2+5 (+ combined poll) | ~200ms, less contention | ~20 lines |
-| Fix 3 (non-blocking CO2) | ~66ms (HTU21D only) | ~50 lines |
-| Fix 3+5 | ~66ms | ~70 lines |
-| Fix 4 (AsyncWebServer) | <1ms | major refactor |
+| Before fixes | ~530ms (normal), ~2030ms (CO2 error) | -- |
+| Fix 1 (getTemperature false) | ~330ms | subsumed by Fix 3 |
+| Fix 2 (handleClient between) | ~200ms | **implemented** |
+| Fix 3 (non-blocking CO2) | ~66ms (HTU21D only) | **implemented** |
+| Fix 5 (combined poll) | same, less contention | **implemented** |
+| Fix 4 (AsyncWebServer) | <1ms | not implemented |
+
+**Current worst case after fixes:** ~66ms (HTU21D I2C read). CO2 reads no longer
+block the loop at all. Poll contention reduced from 3 requests to 1 per cycle.

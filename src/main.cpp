@@ -47,6 +47,11 @@ String stripMode = "solid";
 uint8_t rainbowHue = 0;
 unsigned long lastHTU21DRead = 0;
 
+enum CO2State { CO2_IDLE, CO2_WAITING };
+CO2State co2State = CO2_IDLE;
+unsigned long co2CmdSent = 0;
+const byte CO2_CMD[9] = {0xFF, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};
+
 void updateOled() {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_6x10_tr);
@@ -179,8 +184,13 @@ function toggleLed() {
   setLed(label.innerText === 'ON' ? 'OFF' : 'ON');
   fetch('/led').then(function(r){return r.text()}).then(function(s){setLed(s);actionsPending--});
 }
-fetch('/status').then(function(r){return r.text()}).then(setLed);
-setInterval(function(){if(canPoll())fetch('/status').then(function(r){return r.text()}).then(setLed)}, 5000);
+function syncAll(d) {
+  setLed(d.led ? 'ON' : 'OFF');
+  setRelay(d.relay ? 'ON' : 'OFF');
+  syncStrip(d);
+}
+fetch('/poll').then(function(r){return r.json()}).then(syncAll);
+setInterval(function(){if(canPoll())fetch('/poll').then(function(r){return r.json()}).then(syncAll)}, 5000);
 function updateBatt() {
   fetch('/battery').then(function(r){return r.text()}).then(function(v) {
     var el = document.getElementById('battvolt');
@@ -259,8 +269,6 @@ function toggleRelay() {
   setRelay(label.innerText === 'ON' ? 'OFF' : 'ON');
   fetch('/relay').then(function(r){return r.text()}).then(function(s){setRelay(s);actionsPending--});
 }
-fetch('/relaystatus').then(function(r){return r.text()}).then(setRelay);
-setInterval(function(){if(canPoll())fetch('/relaystatus').then(function(r){return r.text()}).then(setRelay)}, 5000);
 var stripIsOn = false;
 function syncStrip(d) {
   stripIsOn = d.on === 1;
@@ -271,8 +279,6 @@ function syncStrip(d) {
     document.getElementById('stripclr').value = hex;
   }
 }
-fetch('/strip').then(function(r){return r.json()}).then(syncStrip);
-setInterval(function(){if(canPoll())fetch('/strip').then(function(r){return r.json()}).then(syncStrip)}, 5000);
 function toggleStrip() {
   stripIsOn = !stripIsOn;
   document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
@@ -425,6 +431,16 @@ void handleStrip() {
     server.send(200, "application/json", buf);
 }
 
+void handlePoll() {
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+        "{\"led\":%d,\"relay\":%d,\"on\":%d,\"brightness\":%d,\"mode\":\"%s\",\"r\":%d,\"g\":%d,\"b\":%d}",
+        ledOn ? 1 : 0, relayOn ? 1 : 0, stripOn ? 1 : 0,
+        stripBrightness, stripMode.c_str(),
+        stripColor.r, stripColor.g, stripColor.b);
+    server.send(200, "application/json", buf);
+}
+
 void handleTemp() {
     char buf[8];
     snprintf(buf, sizeof(buf), "%.1f", htuTemp);
@@ -533,6 +549,7 @@ void setup() {
     server.on("/strip", handleStrip);
     server.on("/relay", handleRelay);
     server.on("/relaystatus", handleRelayStatus);
+    server.on("/poll", handlePoll);
     server.begin();
 
     Serial.println("Web server started.");
@@ -562,17 +579,59 @@ void loop() {
         updateStrip();
     }
 
-    // Read CO2 periodically
-    if (millis() - lastCO2Read >= CO2_READ_INTERVAL) {
-        lastCO2Read = millis();
-        readCO2();
-        updateOled();
+    // Non-blocking CO2 state machine
+    if (co2State == CO2_IDLE && millis() - lastCO2Read >= CO2_READ_INTERVAL) {
+        Serial1.write(CO2_CMD, 9);
+        Serial1.flush();
+        co2CmdSent = millis();
+        co2State = CO2_WAITING;
+    } else if (co2State == CO2_WAITING) {
+        if (Serial1.available() >= 9) {
+            byte resp[9];
+            Serial1.readBytes(resp, 9);
+            if (resp[0] == 0xFF && resp[1] == 0x86) {
+                // CRC check: 0xFF - (sum of bytes 1..7) + 1
+                byte crc = 0;
+                for (int i = 1; i < 8; i++) crc += resp[i];
+                crc = 0xFF - crc + 1;
+                if (crc == resp[8]) {
+                    co2ppm = resp[2] * 256 + resp[3];
+                    co2temp = resp[4] - 40;
+                    co2error = RESULT_OK;
+                    Serial.printf("CO2: %d ppm  Temp: %d C\n", co2ppm, co2temp);
+                } else {
+                    co2error = RESULT_CRC;
+                    Serial.printf("CO2: CRC error (got 0x%02X, expected 0x%02X)\n", resp[8], crc);
+                }
+            } else {
+                // Header mismatch — desync
+                co2error = RESULT_MATCH;
+                Serial.printf("CO2: header mismatch (0x%02X 0x%02X)\n", resp[0], resp[1]);
+                while (Serial1.available()) Serial1.read();
+                lastCO2Read = millis() + 1000; // extra recovery delay
+            }
+            if (co2error != RESULT_MATCH) {
+                lastCO2Read = millis();
+            }
+            co2State = CO2_IDLE;
+            updateOled();
+        } else if (millis() - co2CmdSent > 500) {
+            // Timeout
+            co2error = RESULT_TIMEOUT;
+            Serial.println("CO2: read timeout");
+            while (Serial1.available()) Serial1.read();
+            lastCO2Read = millis() + 1000; // extra recovery delay
+            co2State = CO2_IDLE;
+        }
     }
+
+    server.handleClient();
 
     // Read HTU21D periodically
     if (millis() - lastHTU21DRead >= HTU21D_READ_INTERVAL) {
         lastHTU21DRead = millis();
         readHTU21D();
+        server.handleClient();
     }
 
     // Read battery voltage periodically
