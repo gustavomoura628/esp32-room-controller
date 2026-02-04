@@ -158,7 +158,7 @@ const char *PAGE = R"rawliteral(
     <input type="color" id="stripclr" value="#ffffff" onchange="setStrip()" style="height:32px;width:32px;border:none;padding:0;cursor:pointer">
   </div>
   <div style="margin-top:8px">
-    <input type="range" id="stripbri" min="2" max="255" value="128" style="width:100%" oninput="setStrip()">
+    <input type="range" id="stripbri" min="2" max="255" value="128" style="width:100%" oninput="queueStrip()">
   </div>
 </div>
 
@@ -292,14 +292,23 @@ function setMode(m) {
     actionsPending--;
   });
 }
+var stripSending = false;
+var stripDirty = false;
+function queueStrip() { if (stripSending) { stripDirty = true; } else { setStrip(); } }
 function setStrip() {
+  stripSending = true;
+  stripDirty = false;
   actionsPending++;
   var b = document.getElementById('stripbri').value;
   var c = document.getElementById('stripclr').value;
   var r = parseInt(c.substr(1,2),16);
   var g = parseInt(c.substr(3,2),16);
   var bl = parseInt(c.substr(5,2),16);
-  fetch('/strip?on=' + (stripIsOn?1:0) + '&brightness=' + b + '&r=' + r + '&g=' + g + '&b=' + bl).then(function(){actionsPending--});
+  fetch('/strip?on=' + (stripIsOn?1:0) + '&brightness=' + b + '&r=' + r + '&g=' + g + '&b=' + bl).then(function(){
+    actionsPending--;
+    stripSending = false;
+    if (stripDirty) setStrip();
+  });
 }
 </script>
 </body>
