@@ -111,7 +111,7 @@ const char *PAGE = R"rawliteral(
 </style>
 </head>
 <body>
-<h1>ESP32 Room Controller</h1>
+<h1>ESP32 Room Controller <span id="sync" title="In sync" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;vertical-align:middle;transition:background 0.3s"></span></h1>
 
 <div class="grid">
 
@@ -167,6 +167,7 @@ const char *PAGE = R"rawliteral(
 <script>
 var actionsPending = 0;
 function canPoll() { return actionsPending === 0; }
+setInterval(function(){var e=document.getElementById('sync');if(actionsPending===0){e.style.background='#22c55e';e.title='In sync'}else{e.style.background='#eab308';e.title='Syncing...'}},200);
 function setLed(state) {
   var box = document.getElementById('ledbox');
   var label = document.getElementById('ledlabel');
@@ -182,7 +183,7 @@ function toggleLed() {
   actionsPending++;
   var label = document.getElementById('ledlabel');
   setLed(label.innerText === 'ON' ? 'OFF' : 'ON');
-  fetch('/led').then(function(r){return r.text()}).then(function(s){setLed(s);actionsPending--});
+  fetch('/led').then(function(r){return r.text()}).then(function(s){setLed(s);actionsPending--}).catch(function(){actionsPending--});
 }
 function syncAll(d) {
   setLed(d.led ? 'ON' : 'OFF');
@@ -267,7 +268,7 @@ function toggleRelay() {
   actionsPending++;
   var label = document.getElementById('relaylabel');
   setRelay(label.innerText === 'ON' ? 'OFF' : 'ON');
-  fetch('/relay').then(function(r){return r.text()}).then(function(s){setRelay(s);actionsPending--});
+  fetch('/relay').then(function(r){return r.text()}).then(function(s){setRelay(s);actionsPending--}).catch(function(){actionsPending--});
 }
 var stripIsOn = false;
 function syncStrip(d) {
@@ -290,7 +291,7 @@ function setMode(m) {
     stripIsOn = d.on === 1;
     document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
     actionsPending--;
-  });
+  }).catch(function(){actionsPending--});
 }
 var stripSending = false;
 var stripDirty = false;
@@ -308,7 +309,7 @@ function setStrip() {
     actionsPending--;
     stripSending = false;
     if (stripDirty) setStrip();
-  });
+  }).catch(function(){actionsPending--;stripSending=false});
 }
 </script>
 </body>
