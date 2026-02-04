@@ -211,32 +211,41 @@ function updateBatt() {
 }
 updateBatt();
 setInterval(updateBatt, 10000);
+var co2Loaded = false, co2Result = 0, co2Ppm = 0, co2Uptime = 0, co2UptimeAt = Date.now();
+function renderCO2() {
+  if (!co2Loaded) return;
+  var el = document.getElementById('co2val');
+  var label = document.getElementById('co2label');
+  if (co2Result !== 1) {
+    var errNames = {0:'no response',2:'timeout',3:'desync',4:'CRC error',5:'filter'};
+    el.innerText = co2Ppm || '--';
+    el.style.color = '#ef4444';
+    label.innerText = 'CO2 (' + (errNames[co2Result] || 'error ' + co2Result) + ')';
+    return;
+  }
+  var up = co2Uptime + (Date.now() - co2UptimeAt) / 1000;
+  if (up < 180) {
+    el.innerText = co2Ppm;
+    el.style.color = '#888';
+    label.innerText = 'CO2 warming up (' + Math.max(0, Math.round(180 - up)) + 's)';
+    return;
+  }
+  el.innerText = co2Ppm;
+  label.innerText = 'CO2 (ppm)';
+  if (co2Ppm <= 800) el.style.color = '#22c55e';
+  else if (co2Ppm <= 1000) el.style.color = '#eab308';
+  else el.style.color = '#ef4444';
+}
 function updateCO2() {
   fetch('/co2status').then(function(r){return r.json()}).then(function(d) {
-    var el = document.getElementById('co2val');
-    var label = document.getElementById('co2label');
-    if (d.result !== 1) {
-      var errNames = {0:'no response',2:'timeout',3:'desync',4:'CRC error',5:'filter'};
-      el.innerText = d.ppm || '--';
-      el.style.color = '#ef4444';
-      label.innerText = 'CO2 (' + (errNames[d.result] || 'error ' + d.result) + ')';
-      return;
-    }
-    if (d.uptime < 180) {
-      el.innerText = d.ppm;
-      el.style.color = '#888';
-      label.innerText = 'CO2 warming up (' + (180 - d.uptime) + 's)';
-      return;
-    }
-    el.innerText = d.ppm;
-    label.innerText = 'CO2 (ppm)';
-    if (d.ppm <= 800) el.style.color = '#22c55e';
-    else if (d.ppm <= 1000) el.style.color = '#eab308';
-    else el.style.color = '#ef4444';
+    co2Result = d.result; co2Ppm = d.ppm; co2Uptime = d.uptime; co2UptimeAt = Date.now();
+    co2Loaded = true;
+    renderCO2();
   });
 }
 updateCO2();
 setInterval(updateCO2, 5000);
+setInterval(renderCO2, 1000);
 function updateHTU() {
   fetch('/temp').then(function(r){return r.text()}).then(function(v) {
     var el = document.getElementById('htutemp');
