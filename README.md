@@ -77,6 +77,34 @@ running in a separate terminal). See [CLAUDE.md](CLAUDE.md).
 | `/strip` | GET | LED strip control: `on`, `brightness`, `mode`, `r`, `g`, `b` params |
 | `/poll` | GET | Returns combined LED, relay, and strip state as JSON |
 
+## Remote access
+
+The web UI is accessible outside the LAN via [Tailscale](https://tailscale.com/)
+subnet routing. A PC on the same network acts as a subnet router so any device
+on the Tailnet can reach the ESP32 at its LAN IP.
+
+On the subnet router (the PC on the LAN):
+
+```
+sudo tailscale set --advertise-routes=192.168.0.0/24
+```
+
+On Linux clients, subnet routes must be explicitly accepted:
+
+```
+sudo tailscale set --accept-routes
+```
+
+(Mobile and macOS clients accept routes by default.)
+
+The route must also be approved in the
+[admin console](https://login.tailscale.com/admin/machines) (click the router
+node and enable the subnet). If using custom ACLs, add a grant for the subnet:
+
+```jsonc
+{"src": ["autogroup:member"], "dst": ["192.168.0.0/24"], "ip": ["*"]}
+```
+
 ## WiFi antenna defect
 
 The ESP32-C3 SuperMini has a known antenna design flaw -- the stock SMD antenna is tuned for 2.7 GHz instead of 2.4 GHz, and a required stripline is missing. TX power must be capped at 8.5 dBm in software (`WiFi.setTxPower(WIFI_POWER_8_5dBm)`). A 31mm wire antenna mod can fix this permanently. Details in [WIFI_TEST_LOG.md](WIFI_TEST_LOG.md) and [COMPONENTS.md](COMPONENTS.md).
