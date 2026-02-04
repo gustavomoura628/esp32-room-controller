@@ -49,7 +49,7 @@ while true; do
         fi
 
         # Start new flash+monitor in a pseudo-TTY
-        script -qfc "pio run -t upload -t monitor 2>&1 | tee serial.log" /dev/null &
+        script -qfc "pio run -t upload -t monitor 2>&1 | stdbuf -oL tee serial.log" /dev/null &
         FLASH_PID=$!
     fi
     sleep 1

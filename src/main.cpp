@@ -160,6 +160,8 @@ const char *PAGE = R"rawliteral(
 </div>
 
 <script>
+var actionsPending = 0;
+function canPoll() { return actionsPending === 0; }
 function setLed(state) {
   var box = document.getElementById('ledbox');
   var label = document.getElementById('ledlabel');
@@ -172,11 +174,13 @@ function setLed(state) {
   }
 }
 function toggleLed() {
+  actionsPending++;
   var label = document.getElementById('ledlabel');
   setLed(label.innerText === 'ON' ? 'OFF' : 'ON');
-  fetch('/led').then(function(r){return r.text()}).then(setLed);
+  fetch('/led').then(function(r){return r.text()}).then(function(s){setLed(s);actionsPending--});
 }
 fetch('/status').then(function(r){return r.text()}).then(setLed);
+setInterval(function(){if(canPoll())fetch('/status').then(function(r){return r.text()}).then(setLed)}, 5000);
 function updateBatt() {
   fetch('/battery').then(function(r){return r.text()}).then(function(v) {
     var el = document.getElementById('battvolt');
@@ -250,30 +254,46 @@ function setRelay(state) {
   }
 }
 function toggleRelay() {
+  actionsPending++;
   var label = document.getElementById('relaylabel');
   setRelay(label.innerText === 'ON' ? 'OFF' : 'ON');
-  fetch('/relay').then(function(r){return r.text()}).then(setRelay);
+  fetch('/relay').then(function(r){return r.text()}).then(function(s){setRelay(s);actionsPending--});
 }
 fetch('/relaystatus').then(function(r){return r.text()}).then(setRelay);
+setInterval(function(){if(canPoll())fetch('/relaystatus').then(function(r){return r.text()}).then(setRelay)}, 5000);
 var stripIsOn = false;
+function syncStrip(d) {
+  stripIsOn = d.on === 1;
+  document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+  document.getElementById('stripbri').value = d.brightness;
+  if (d.r !== undefined) {
+    var hex = '#' + ('0'+d.r.toString(16)).slice(-2) + ('0'+d.g.toString(16)).slice(-2) + ('0'+d.b.toString(16)).slice(-2);
+    document.getElementById('stripclr').value = hex;
+  }
+}
+fetch('/strip').then(function(r){return r.json()}).then(syncStrip);
+setInterval(function(){if(canPoll())fetch('/strip').then(function(r){return r.json()}).then(syncStrip)}, 5000);
 function toggleStrip() {
   stripIsOn = !stripIsOn;
   document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
   setStrip();
 }
 function setMode(m) {
+  actionsPending++;
   fetch('/strip?mode=' + m + '&on=1').then(function(r){return r.json()}).then(function(d) {
     stripIsOn = d.on === 1;
     document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+    actionsPending--;
   });
 }
 function setStrip() {
+  actionsPending++;
   var b = document.getElementById('stripbri').value;
   var c = document.getElementById('stripclr').value;
   var r = parseInt(c.substr(1,2),16);
   var g = parseInt(c.substr(3,2),16);
   var bl = parseInt(c.substr(5,2),16);
-  fetch('/strip?on=' + (stripIsOn?1:0) + '&brightness=' + b + '&r=' + r + '&g=' + g + '&b=' + bl);
+  fetch('/strip?on=' + (stripIsOn?1:0) + '&brightness=' + b + '&r=' + r + '&g=' + g + '&b=' + bl).then(function(){actionsPending--});
 }
 </script>
 </body>
@@ -397,11 +417,11 @@ void handleStrip() {
     if (server.hasArg("r") && server.hasArg("g") && server.hasArg("b")) {
         stripColor = CRGB(server.arg("r").toInt(), server.arg("g").toInt(), server.arg("b").toInt());
     }
-    updateStrip();
+    if (server.args() > 0) updateStrip();
 
-    char buf[64];
-    snprintf(buf, sizeof(buf), "{\"on\":%d,\"brightness\":%d,\"mode\":\"%s\"}",
-        stripOn ? 1 : 0, stripBrightness, stripMode.c_str());
+    char buf[96];
+    snprintf(buf, sizeof(buf), "{\"on\":%d,\"brightness\":%d,\"mode\":\"%s\",\"r\":%d,\"g\":%d,\"b\":%d}",
+        stripOn ? 1 : 0, stripBrightness, stripMode.c_str(), stripColor.r, stripColor.g, stripColor.b);
     server.send(200, "application/json", buf);
 }
 
