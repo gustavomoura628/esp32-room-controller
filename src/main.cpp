@@ -104,8 +104,10 @@ const char *PAGE = R"rawliteral(
   .relay-off { background: #1a1a1a; border: 2px solid #3a3a3a; }
   #ledlabel { font-size: 0.9em; color: #aaa; }
   button { padding: 8px 16px; font-size: 0.9em; margin-top: 8px; cursor: pointer;
-           background: #3b82f6; color: #fff; border: none; border-radius: 6px; }
-  button:active { background: #2563eb; }
+           background: #3b82f6; color: #fff; border: none; border-radius: 6px;
+           box-shadow: 0 3px 0 #1e3a5f; position: relative; top: 0; transition: all 0.1s; }
+  button:active { top: 2px; box-shadow: 0 1px 0 #1e3a5f; }
+  .btn-on { background: #2563eb; top: 2px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.4); }
   @media (max-width: 500px) { .grid { grid-template-columns: repeat(2, 1fr); }
     .wide { grid-column: span 2; } }
 </style>
@@ -139,22 +141,22 @@ const char *PAGE = R"rawliteral(
   <div style="font-size:0.85em;color:#aaa;margin-bottom:6px">Board LED</div>
   <div id="ledbox" class="led-box led-off"></div>
   <div id="ledlabel">OFF</div>
-  <button onclick="toggleLed()">Toggle</button>
+  <button id="ledbtn" onclick="toggleLed()">Toggle</button>
 </div>
 
 <div class="card">
   <div style="font-size:0.85em;color:#aaa;margin-bottom:6px">Room Light</div>
   <div id="relaybox" class="led-box relay-off"></div>
   <div id="relaylabel">OFF</div>
-  <button onclick="toggleRelay()">Toggle</button>
+  <button id="relaybtn" onclick="toggleRelay()">Toggle</button>
 </div>
 
 <div class="card wide">
   <div style="font-size:0.9em;color:#aaa;margin-bottom:6px">LED Strip</div>
   <button id="stripbtn" onclick="toggleStrip()">Turn On</button>
   <div style="margin-top:10px;display:flex;gap:6px;justify-content:center;align-items:center">
-    <button onclick="setMode('rainbow')" style="font-size:0.85em;padding:6px 12px;margin:0">Rainbow</button>
-    <button onclick="setMode('solid')" style="font-size:0.85em;padding:6px 12px;margin:0">Solid</button>
+    <button id="rainbowbtn" onclick="setMode('rainbow')" style="font-size:0.85em;padding:6px 12px;margin:0">Rainbow</button>
+    <button id="solidbtn" onclick="setMode('solid')" style="font-size:0.85em;padding:6px 12px;margin:0">Solid</button>
     <input type="color" id="stripclr" value="#ffffff" onchange="setStrip()" style="height:32px;width:32px;border:none;padding:0;cursor:pointer">
   </div>
   <div style="margin-top:8px">
@@ -171,12 +173,15 @@ setInterval(function(){var e=document.getElementById('sync');if(actionsPending==
 function setLed(state) {
   var box = document.getElementById('ledbox');
   var label = document.getElementById('ledlabel');
+  var btn = document.getElementById('ledbtn');
   if (state === 'ON') {
     box.className = 'led-box led-on';
     label.innerText = 'ON';
+    btn.className = 'btn-on';
   } else {
     box.className = 'led-box led-off';
     label.innerText = 'OFF';
+    btn.className = '';
   }
 }
 function toggleLed() {
@@ -266,11 +271,14 @@ updateHTU();
 setInterval(updateHTU, 5000);
 function setRelay(state) {
   var box = document.getElementById('relaybox');
+  var btn = document.getElementById('relaybtn');
   document.getElementById('relaylabel').innerText = state;
   if (state === 'ON') {
     box.className = 'led-box relay-on';
+    btn.className = 'btn-on';
   } else {
     box.className = 'led-box relay-off';
+    btn.className = '';
   }
 }
 function toggleRelay() {
@@ -280,9 +288,18 @@ function toggleRelay() {
   fetch('/relay').then(function(r){return r.text()}).then(function(s){setRelay(s);actionsPending--}).catch(function(){actionsPending--});
 }
 var stripIsOn = false;
+var stripMode = 'solid';
+function updateStripBtns() {
+  var sb = document.getElementById('stripbtn');
+  sb.innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+  sb.className = stripIsOn ? 'btn-on' : '';
+  document.getElementById('rainbowbtn').className = stripMode === 'rainbow' ? 'btn-on' : '';
+  document.getElementById('solidbtn').className = stripMode === 'solid' ? 'btn-on' : '';
+}
 function syncStrip(d) {
   stripIsOn = d.on === 1;
-  document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+  if (d.mode) stripMode = d.mode;
+  updateStripBtns();
   document.getElementById('stripbri').value = d.brightness;
   if (d.r !== undefined) {
     var hex = '#' + ('0'+d.r.toString(16)).slice(-2) + ('0'+d.g.toString(16)).slice(-2) + ('0'+d.b.toString(16)).slice(-2);
@@ -291,14 +308,18 @@ function syncStrip(d) {
 }
 function toggleStrip() {
   stripIsOn = !stripIsOn;
-  document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+  updateStripBtns();
   setStrip();
 }
 function setMode(m) {
   actionsPending++;
+  stripMode = m;
+  stripIsOn = true;
+  updateStripBtns();
   fetch('/strip?mode=' + m + '&on=1').then(function(r){return r.json()}).then(function(d) {
     stripIsOn = d.on === 1;
-    document.getElementById('stripbtn').innerText = stripIsOn ? 'Turn Off' : 'Turn On';
+    if (d.mode) stripMode = d.mode;
+    updateStripBtns();
     actionsPending--;
   }).catch(function(){actionsPending--});
 }
