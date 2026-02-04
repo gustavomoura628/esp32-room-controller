@@ -158,7 +158,7 @@ const char *PAGE = R"rawliteral(
     <input type="color" id="stripclr" value="#ffffff" onchange="setStrip()" style="height:32px;width:32px;border:none;padding:0;cursor:pointer">
   </div>
   <div style="margin-top:8px">
-    <input type="range" id="stripbri" min="1" max="255" value="128" style="width:100%" oninput="setStrip()">
+    <input type="range" id="stripbri" min="2" max="255" value="128" style="width:100%" oninput="setStrip()">
   </div>
 </div>
 
