@@ -534,6 +534,16 @@ Middle = Collector → Relay IN (yellow wire) + 4.7kΩ to 5V
 Right = Emitter    → GND
 ```
 
+### Known Issue: CO2 sensor corruption on shared 5V rail
+
+The relay coil draws ~70-200mA continuously while energized. When powered from the same USB 5V rail as the MH-Z19C, this causes a permanent voltage sag that corrupts the NDIR CO2 measurement. Symptoms: CO2 readings climb from ~700 to ~5000 ppm (sensor max) over ~40 seconds while the relay is ON, then recover over ~30 seconds after relay OFF. Temperature and humidity sensors are unaffected.
+
+This is not a transient spike -- a 470µF decoupling capacitor does not help. The sag persists as long as the coil is energized.
+
+**Fix:** Power the relay circuit from a separate 5V supply (e.g., a dedicated USB charger or power strip PSU). Both the relay module VCC and the TIP122 collector-side 5V (including the 4.7kΩ pull-up) should be on the separate supply. The TIP122 base is still driven by ESP32 GPIO7.
+
+Confirmed by testing: identical behavior on both Arduino and ESPHome firmware, persists with mains breaker off (ruling out contact-side effects), disappears completely with relay on separate 5V PSU.
+
 ---
 
 ## 9. WS2813 LED Strip
